@@ -1,52 +1,60 @@
-version: "3.9"
+version: '3.9'
 
 services:
-  backend:
-    build: ./backend
-    container_name: hospital_backend
-    environment:
-      - MYSQL_USER=root
-      - MYSQL_PASSWORD=root
-      - MYSQL_HOST=db
-      - MYSQL_PORT=3306
-      - MYSQL_DB=hospitaldb
-      - OLLAMA_URL=http://ollama:11434/api/generate
-      - OLLAMA_MODEL=llama3
-    depends_on:
-      - db
-      - ollama
-    ports:
-      - "8000:8000"
-
-  frontend:
-    build: ./frontend
-    container_name: hospital_frontend
-    depends_on:
-      - backend
-    ports:
-      - "5173:5173"
-
-  db:
+  mysql:
     image: mysql:8.0
-    container_name: hospital_mysql
-    restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: hospitaldb
-    ports:
-      - "3306:3306"
+      MYSQL_ROOT_PASSWORD: hospital2026
+      MYSQL_DATABASE: hci_chatbot
     volumes:
-      - mysql_data:/var/lib/mysql
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - internal
 
   ollama:
     image: ollama/ollama
-    container_name: hospital_ollama
-    ports:
-      - "11434:11434"
     volumes:
-      - ollama_data:/root/.ollama
+      - ollama:/root/.ollama
+    command: serve
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - internal
 
-volumes:
-  mysql_data:
-  ollama_data:
+  backend:
+    build: ./backend
+    depends_on:
+      - mysql
+      - ollama
+    environment:
+      - OLLAMA_URL=http://ollama:11434
+      - LLM_MODEL=llama3
+    networks:
+      - internal
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    networks:
+      - internal
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - frontend
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge
