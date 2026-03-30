@@ -1,128 +1,68 @@
+# backend/app/routes/chatbot.py
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from datetime import datetime
-from ..database import SessionLocal
-from ..services.appointment_service import get_available_times, create_appointment
-from ..utils.conversation_manager import init_conversation, get_state, update_state, end_conversation
-from ..services.llm_service import ask_llama
+from ..services.llm_service import LLMService
+from ..services.appointment_service import AppointmentService
+from ..utils.conversation_manager import ConversationManager
 
-router = APIRouter()
+router = APIRouter(prefix="/chatbot", tags=["chatbot"])
 
-SPECIALTIES = [
-    "Medicina General",
-    "Pediatría",
-    "Cardiología",
-    "Dermatología",
-    "Ginecología",
-    "Ortopedia",
-    "Neurología"
-]
+llm = LLMService()
+conv_manager = ConversationManager()
+appointment_service = AppointmentService()
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-class ChatRequest(BaseModel):
-    session_id: str
+class ChatMessage(BaseModel):
+    conversation_id: str
     message: str
+    patient_id: str = None
 
-@router.post("/chat")
-def chat(req: ChatRequest, db: Session = Depends(get_db)):
+@router.post("/message")
+async def process_message(msg: ChatMessage):
+    # Guardar mensaje entrante
+    conv_manager.save_message(msg.conversation_id, "user", msg.message)
 
-    state = get_state(req.session_id)
+    state = conv_manager.get_state(msg.conversation_id)
 
-    if not state:
-        init_conversation(req.session_id)
-        return {"response": "🏥 Bienvenido al asistente virtual del Hospital. ¿Qué especialidad deseas agendar?"}
+    # === FLUJO DEL CHATBOT ===
+    if state.get("step") is None:
+        # Mensaje de bienvenida
+        welcome_prompt = """Eres un asistente médico amable del Hospital Central. 
+        Saluda al paciente, explícale que eres un chatbot con IA y que vas a ayudarlo a agendar una cita.
+        Sé cálido y profesional."""
+        response = llm.generate_response(welcome_prompt)
+        conv_manager.update_state(msg.conversation_id, {"step": "ask_name"})
 
-    step = state["step"]
-    msg = req.message.strip()
+    elif state.get("step") == "ask_name":
+        # Extraer nombre y documento
+        prompt = f"""Extrae del siguiente mensaje: nombre completo y número de documento.
+        Mensaje: {msg.message}
+        Responde SOLO en JSON: {{"nombre": "...", "documento": "..."}}"""
+        data = llm.get_structured_response("", prompt)
+        conv_manager.update_state(msg.conversation_id, {"step": "ask_specialty", **data})
+        response = f"Gracias {data.get('nombre', 'paciente')}. ¿Para qué especialidad deseas agendar la cita?"
 
-    # Paso: seleccionar especialidad
-    if step == "welcome":
-        if msg not in SPECIALTIES:
-            return {"response": f"Especialidad no válida. Especialidades disponibles:\n- " + "\n- ".join(SPECIALTIES)}
-        update_state(req.session_id, "date", "specialty", msg)
-        return {"response": f"Perfecto. ¿Qué fecha deseas para {msg}? (Formato: YYYY-MM-DD)"}
+    elif state.get("step") == "ask_specialty":
+        specialties = appointment_service.get_specialties()
+        prompt = f"""El usuario dijo: {msg.message}
+        Especialidades disponibles: {specialties}
+        Devuelve JSON: {{"especialidad": "nombre exacto de la especialidad"}}"""
+        data = llm.get_structured_response("", prompt)
+        conv_manager.update_state(msg.conversation_id, {"step": "confirm", "especialidad": data.get("especialidad")})
+        response = f"Perfecto. ¿Deseas agendar en {data.get('especialidad')}? Confirma con 'SÍ'."
 
-    # Paso: fecha
-    if step == "date":
-        try:
-            appointment_date = datetime.strptime(msg, "%Y-%m-%d").date()
-        except:
-            return {"response": "Formato incorrecto. Escribe la fecha como YYYY-MM-DD (Ej: 2026-04-01)"}
-
-        update_state(req.session_id, "time", "appointment_date", str(appointment_date))
-
-        specialty = state["data"]["specialty"]
-        available_times = get_available_times(db, specialty, appointment_date)
-
-        if not available_times:
-            return {"response": "No hay horarios disponibles para esa fecha. Intenta con otra fecha."}
-
-        times_text = "\n".join([t.strftime("%H:%M") for t in available_times])
-
-        return {"response": f"Horarios disponibles:\n{times_text}\n\nEscribe el horario exacto (Ej: 09:00)"}
-
-    # Paso: hora
-    if step == "time":
-        try:
-            appointment_time = datetime.strptime(msg, "%H:%M").time()
-        except:
-            return {"response": "Hora inválida. Usa formato HH:MM (Ej: 09:00)"}
-
-        update_state(req.session_id, "patient_name", "appointment_time", msg)
-        return {"response": "Por favor escribe tu nombre completo:"}
-
-    # Paso: nombre
-    if step == "patient_name":
-        update_state(req.session_id, "patient_document", "patient_name", msg)
-        return {"response": "Ahora escribe tu número de documento:"}
-
-    # Paso: documento y confirmación final
-    if step == "patient_document":
-        update_state(req.session_id, "confirm", "patient_document", msg)
-
-        data = state["data"]
-
-        specialty = data["specialty"]
-        appointment_date = datetime.strptime(data["appointment_date"], "%Y-%m-%d").date()
-        appointment_time = datetime.strptime(data["appointment_time"], "%H:%M").time()
-        patient_name = data["patient_name"]
-        patient_document = msg
-
-        appointment = create_appointment(
-            db,
-            patient_name=patient_name,
-            patient_document=patient_document,
-            specialty=specialty,
-            appointment_date=appointment_date,
-            appointment_time=appointment_time
+    elif state.get("step") == "confirm" and msg.message.upper() in ["SÍ", "SI", "YES"]:
+        # Crear cita
+        appointment = appointment_service.create_appointment(
+            patient_id=msg.patient_id or "TEMP",
+            specialty=state["especialidad"],
+            conversation_id=msg.conversation_id
         )
+        response = f"✅ Cita agendada exitosamente. Número de cita: {appointment['id']}\n\nGracias por usar nuestro servicio. ¿Deseas que un asistente humano revise tu solicitud?"
+        conv_manager.update_state(msg.conversation_id, {"step": "finished"})
+    else:
+        response = "Entendido. ¿En qué más puedo ayudarte?"
 
-        end_conversation(req.session_id)
+    # Guardar respuesta del bot
+    conv_manager.save_message(msg.conversation_id, "assistant", response)
 
-        closing_message = (
-            f"✅ Cita agendada exitosamente.\n\n"
-            f"📌 Especialidad: {specialty}\n"
-            f"📅 Fecha: {appointment_date}\n"
-            f"🕒 Hora: {appointment_time.strftime('%H:%M')}\n"
-            f"🧾 Radicado: {appointment.id}\n\n"
-            f"Gracias por usar el asistente virtual del Hospital. ¡Feliz día!"
-        )
-
-        return {"response": closing_message}
-
-    # fallback IA
-    llm_prompt = f"""
-Eres un asistente virtual hospitalario encargado únicamente de agendar citas médicas.
-Responde en español formal y breve.
-Usuario: {msg}
-"""
-
-    ai_response = ask_llama(llm_prompt)
-    return {"response": ai_response}
+    return {"response": response, "conversation_id": msg.conversation_id}
