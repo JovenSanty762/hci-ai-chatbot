@@ -1,6 +1,8 @@
 # backend/app/routes/chatbot.py
+import traceback
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from ..logger import logger
 from ..services.llm_service import LLMService
 from ..services.appointment_service import AppointmentService
 from ..utils.conversation_manager import ConversationManager
