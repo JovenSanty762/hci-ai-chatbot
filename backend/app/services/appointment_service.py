@@ -1,37 +1,24 @@
+# backend/app/services/appointment_service.py
 from sqlalchemy.orm import Session
-from datetime import time
-from ..models import Appointment
+from ..models import Appointment, Specialty
+from ..database import get_db
+from datetime import datetime
 
-AVAILABLE_TIMES = [
-    time(8, 0),
-    time(9, 0),
-    time(10, 0),
-    time(11, 0),
-    time(14, 0),
-    time(15, 0),
-    time(16, 0)
-]
+class AppointmentService:
+    def get_specialties(self):
+        db = next(get_db())
+        return [s.name for s in db.query(Specialty).all()]
 
-def get_available_times(db: Session, specialty: str, appointment_date):
-    booked_times = db.query(Appointment.appointment_time).filter(
-        Appointment.specialty == specialty,
-        Appointment.appointment_date == appointment_date,
-        Appointment.status == "scheduled"
-    ).all()
-
-    booked_times = [t[0] for t in booked_times]
-
-    return [t for t in AVAILABLE_TIMES if t not in booked_times]
-
-def create_appointment(db: Session, patient_name, patient_document, specialty, appointment_date, appointment_time):
-    appointment = Appointment(
-        patient_name=patient_name,
-        patient_document=patient_document,
-        specialty=specialty,
-        appointment_date=appointment_date,
-        appointment_time=appointment_time
-    )
-    db.add(appointment)
-    db.commit()
-    db.refresh(appointment)
-    return appointment
+    def create_appointment(self, patient_id: str, specialty: str, conversation_id: str):
+        db = next(get_db())
+        appointment = Appointment(
+            patient_id=patient_id,
+            specialty=specialty,
+            status="pending",
+            conversation_id=conversation_id,
+            created_at=datetime.utcnow()
+        )
+        db.add(appointment)
+        db.commit()
+        db.refresh(appointment)
+        return {"id": appointment.id, "status": "success"}
