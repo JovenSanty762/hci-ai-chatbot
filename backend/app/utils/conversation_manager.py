@@ -1,23 +1,25 @@
-conversation_state = {}
+# backend/app/utils/conversation_manager.py
+from typing import Dict
+import json
+from datetime import datetime
 
-def init_conversation(session_id: str):
-    conversation_state[session_id] = {
-        "step": "welcome",
-        "data": {}
-    }
+class ConversationManager:
+    def __init__(self):
+        self.conversations: Dict = {}
 
-def get_state(session_id: str):
-    return conversation_state.get(session_id)
+    def save_message(self, conv_id: str, role: str, content: str):
+        if conv_id not in self.conversations:
+            self.conversations[conv_id] = {"messages": [], "state": {}, "created": datetime.utcnow()}
+        
+        self.conversations[conv_id]["messages"].append({
+            "role": role,
+            "content": content,
+            "timestamp": datetime.utcnow().isoformat()
+        })
 
-def update_state(session_id: str, step: str, key=None, value=None):
-    if session_id not in conversation_state:
-        init_conversation(session_id)
+    def update_state(self, conv_id: str, new_state: dict):
+        if conv_id in self.conversations:
+            self.conversations[conv_id]["state"].update(new_state)
 
-    conversation_state[session_id]["step"] = step
-
-    if key:
-        conversation_state[session_id]["data"][key] = value
-
-def end_conversation(session_id: str):
-    if session_id in conversation_state:
-        del conversation_state[session_id]
+    def get_state(self, conv_id: str) -> dict:
+        return self.conversations.get(conv_id, {}).get("state", {})
