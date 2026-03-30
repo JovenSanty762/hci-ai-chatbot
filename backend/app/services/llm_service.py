@@ -3,6 +3,8 @@ import requests
 import json
 from typing import Dict, Any
 from ..utils.config import settings
+from ..config import OLLAMA_URL, OLLAMA_MODEL
+from ..logger import logger
 
 class LLMService:
     def __init__(self):
@@ -10,22 +12,20 @@ class LLMService:
         self.model = settings.LLM_MODEL  # "llama3" o "llama3:8b"
 
     def generate_response(self, prompt: str, temperature: float = 0.7) -> str:
-        """Llama a Ollama localmente"""
+        payload = {
+        "model": OLLAMA_MODEL,
+        "prompt": prompt,
+        "stream": False
+        }
         try:
-            response = requests.post(
-                f"{self.ollama_url}/api/generate",
-                json={
-                    "model": self.model,
-                    "prompt": prompt,
-                    "temperature": temperature,
-                    "stream": False
-                },
-                timeout=60
-            )
+            response = requests.post(OLLAMA_URL, json=payload, timeout=60)
             response.raise_for_status()
-            return response.json()["response"].strip()
-        except Exception as e:
-            return f"Lo siento, en este momento no puedo procesar tu solicitud. Por favor, contacta a un asistente humano."
+            data = response.json()
+            logger.info("Respuesta exitosa desde Ollama/Llama3")
+            return data.get("response", "No se obtuvo respuesta del modelo IA.")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error conectando con Ollama: {str(e)}")
+            return "⚠️ No es posible conectarse al motor IA en este momento. Intenta más tarde."
 
     def get_structured_response(self, system_prompt: str, user_message: str) -> Dict:
         """Obtiene respuesta estructurada (JSON)"""
