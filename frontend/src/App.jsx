@@ -1,9 +1,173 @@
-import ChatWindow from "./components/ChatWindow";
+import { useState, useEffect } from 'react';
+import axios from 'axios';
 
-export default function App() {
+const API_BASE = '/api';   // gracias al nginx
+
+function App() {
+  const [step, setStep] = useState(0);
+  const [patient, setPatient] = useState({ cedula: '', nombre_completo: '', telefono: '', email: '' });
+  const [specialties, setSpecialties] = useState([]);
+  const [selectedSpecialty, setSelectedSpecialty] = useState(null);
+  const [doctors, setDoctors] = useState([]);
+  const [selectedDoctor, setSelectedDoctor] = useState(null);
+  const [availabilities, setAvailabilities] = useState([]);
+  const [selectedSlot, setSelectedSlot] = useState(null);
+
+  // Cargar especialidades al inicio
+  useEffect(() => {
+    axios.get(`${API_BASE}/doctors/specialties/`).then(res => setSpecialties(res.data));
+  }, []);
+
+  const handlePatientSubmit = async (e) => {
+    e.preventDefault();
+    const res = await axios.post(`${API_BASE}/patients/`, patient);
+    setPatient({ ...patient, id: res.data.id });
+    setStep(2);
+  };
+
+  const handleSpecialtySelect = (spec) => {
+    setSelectedSpecialty(spec);
+    axios.get(`${API_BASE}/doctors/?specialty_id=${spec.id}`).then(res => {
+      setDoctors(res.data);
+      setStep(3);
+    });
+  };
+
+  const handleDoctorSelect = (doc) => {
+    setSelectedDoctor(doc);
+    // Aquí puedes llamar a un endpoint de availabilities si lo creas
+    // Por ahora simulamos algunos horarios
+    setAvailabilities([
+      { day: 'Lunes', time: '09:00' },
+      { day: 'Lunes', time: '10:30' },
+      { day: 'Martes', time: '14:00' },
+    ]);
+    setStep(4);
+  };
+
+  const handleSlotSelect = (slot) => {
+    setSelectedSlot(slot);
+    setStep(5);
+  };
+
+  const handleBooking = async () => {
+    // Aquí llamarías al endpoint de appointments
+    alert(`✅ Cita agendada con ${selectedDoctor.nombre_completo} el ${selectedSlot.day} a las ${selectedSlot.time}`);
+    setStep(0); // Reiniciar flujo
+  };
+
   return (
-    <div>
-      <ChatWindow />
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+      <div className="max-w-2xl w-full bg-white rounded-3xl shadow-2xl overflow-hidden">
+        {/* Header */}
+        <div className="bg-indigo-600 text-white p-6 text-center">
+          <h1 className="text-3xl font-bold">🏥 HCI Chatbot Médico</h1>
+          <p className="text-indigo-200 mt-1">Agendamiento inteligente de citas</p>
+        </div>
+
+        <div className="p-8">
+          {step === 0 && (
+            <div className="text-center">
+              <h2 className="text-4xl font-semibold text-gray-800 mb-4">¡Bienvenido/a!</h2>
+              <p className="text-xl text-gray-600 mb-8">Vamos a agendar tu cita médica en segundos</p>
+              <button
+                onClick={() => setStep(1)}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xl px-10 py-4 rounded-2xl transition"
+              >
+                Comenzar
+              </button>
+            </div>
+          )}
+
+          {step === 1 && (
+            <form onSubmit={handlePatientSubmit} className="space-y-6">
+              <h3 className="text-2xl font-medium">Tus datos</h3>
+              <input type="text" placeholder="Cédula" value={patient.cedula} onChange={e => setPatient({...patient, cedula: e.target.value})} className="w-full p-4 border rounded-2xl" required />
+              <input type="text" placeholder="Nombre completo" value={patient.nombre_completo} onChange={e => setPatient({...patient, nombre_completo: e.target.value})} className="w-full p-4 border rounded-2xl" required />
+              <input type="tel" placeholder="Teléfono" value={patient.telefono} onChange={e => setPatient({...patient, telefono: e.target.value})} className="w-full p-4 border rounded-2xl" required />
+              <input type="email" placeholder="Email (opcional)" value={patient.email} onChange={e => setPatient({...patient, email: e.target.value})} className="w-full p-4 border rounded-2xl" />
+              <button type="submit" className="w-full bg-indigo-600 text-white py-4 rounded-2xl text-xl">Continuar →</button>
+            </form>
+          )}
+
+          {step === 2 && (
+            <div>
+              <h3 className="text-2xl mb-6">¿Qué especialidad necesitas?</h3>
+              <div className="grid grid-cols-2 gap-4">
+                {specialties.map(spec => (
+                  <button
+                    key={spec.id}
+                    onClick={() => handleSpecialtySelect(spec)}
+                    className="p-6 border-2 hover:border-indigo-600 rounded-3xl text-left transition"
+                  >
+                    <div className="font-semibold">{spec.nombre}</div>
+                    <div className="text-sm text-gray-500">{spec.descripcion}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div>
+              <h3 className="text-2xl mb-6">Médicos disponibles en {selectedSpecialty?.nombre}</h3>
+              <div className="space-y-4">
+                {doctors.map(doc => (
+                  <button
+                    key={doc.id}
+                    onClick={() => handleDoctorSelect(doc)}
+                    className="w-full p-6 border-2 hover:border-indigo-600 rounded-3xl text-left"
+                  >
+                    <div className="font-semibold text-lg">{doc.nombre_completo}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {step === 4 && (
+            <div>
+              <h3 className="text-2xl mb-6">Horarios disponibles</h3>
+              <div className="grid grid-cols-3 gap-4">
+                {availabilities.map((slot, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handleSlotSelect(slot)}
+                    className="p-6 border-2 hover:border-indigo-600 rounded-3xl text-center"
+                  >
+                    <div className="font-medium">{slot.day}</div>
+                    <div className="text-2xl font-bold text-indigo-600">{slot.time}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {step === 5 && (
+            <div className="text-center">
+              <h3 className="text-3xl font-semibold mb-8">¡Confirmación final!</h3>
+              <div className="bg-gray-50 p-8 rounded-3xl mb-8 text-left">
+                <p><strong>Paciente:</strong> {patient.nombre_completo}</p>
+                <p><strong>Médico:</strong> {selectedDoctor.nombre_completo}</p>
+                <p><strong>Horario:</strong> {selectedSlot.day} {selectedSlot.time}</p>
+              </div>
+              <button
+                onClick={handleBooking}
+                className="bg-green-600 hover:bg-green-700 text-white text-2xl px-16 py-6 rounded-3xl"
+              >
+                ✅ Agendar cita
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Progress bar */}
+        <div className="h-2 bg-gray-100">
+          <div className="h-2 bg-indigo-600 transition-all" style={{ width: `${(step + 1) * 20}%` }}></div>
+        </div>
+      </div>
     </div>
   );
 }
+
+export default App;
