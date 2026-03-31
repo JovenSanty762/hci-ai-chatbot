@@ -4,9 +4,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .routes import chatbot, appointments
 from .database import engine, Base
+from .models import *          # Para que cree todas las tablas
+from .routes.patients import router as patients_router
+from .routes.doctors import router as doctors_router
 from app.models import Patient, Specialty, Doctor, DoctorAvailability, Appointment
 
-
+Base.metadata.create_all(bind=engine)
 app = FastAPI(title="Hospital AI ChatBot")
 
 # CORS para frontend
@@ -45,4 +48,6 @@ async def log_requests(request: Request, call_next):
         )
 
 # Rutas
+app.include_router(patients_router)
+app.include_router(doctors_router)
 app.include_router(chatbot.router)
