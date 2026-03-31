@@ -33,9 +33,12 @@ class DoctorAvailabilityBase(BaseModel):
     start_time: time
     end_time: time
 
-class DoctorAvailabilityResponse(DoctorAvailabilityBase):
+class DoctorAvailabilityResponse(BaseModel):
     id: int
     doctor_id: int
+    day_of_week: int
+    start_time: time
+    end_time: time
 
     class Config:
         from_attributes = True
