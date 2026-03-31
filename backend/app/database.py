@@ -1,17 +1,25 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
-from sqlalchemy.exc import SQLAlchemyError
-from .config import DATABASE_URL
 from .logger import logger
 from .database import Base
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.ext.declarative import declarative_base
+import os
+from dotenv import load_dotenv
 
-try:
-    engine = create_engine(DATABASE_URL)
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    Base = declarative_base()
+load_dotenv()
 
-    logger.info("Conexión a MySQL inicializada correctamente.")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-except SQLAlchemyError as e:
-    logger.error(f"Error inicializando conexión a MySQL: {str(e)}")
-    raise
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL no está definida en el archivo .env")
+
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+def get_db():
+    db: Session = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
