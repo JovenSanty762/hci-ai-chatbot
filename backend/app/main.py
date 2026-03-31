@@ -2,13 +2,14 @@
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.models import Patient, Specialty, Doctor, DoctorAvailability, Appointment
 from .routes import chatbot, appointments
 from .database import engine, Base
 from .models import *          # Para que cree todas las tablas
 from .routes.patients import router as patients_router
 from .routes.doctors import router as doctors_router
-from app.models import Patient, Specialty, Doctor, DoctorAvailability, Appointment
 from .routes.availability import router as availability_router
+from .routes.appointments import router as appointments_router
 
 Base.metadata.create_all(bind=engine)
 
@@ -54,7 +55,8 @@ async def log_requests(request: Request, call_next):
         )
 
 # Rutas
-app.include_router(patients_router)
-app.include_router(doctors_router)
-app.include_router(availability_router)
 app.include_router(chatbot.router)
+app.include_router(doctors_router)
+app.include_router(patients_router)
+app.include_router(availability_router)
+app.include_router(appointments_router)
