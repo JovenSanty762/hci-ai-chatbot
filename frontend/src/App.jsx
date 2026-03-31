@@ -70,9 +70,37 @@ function App() {
   };
 
   const handleBooking = async () => {
-    // Aquí llamarías al endpoint de appointments
-    alert(`✅ Cita agendada con ${selectedDoctor.nombre_completo} el ${selectedSlot.day} a las ${selectedSlot.time}`);
-    setStep(0); // Reiniciar flujo
+    if (!selectedDoctor || !selectedSlot || !patient.id) {
+      alert("Faltan datos para agendar la cita");
+      return;
+    }
+
+    try {
+      const appointmentData = {
+        patient_id: patient.id,
+        doctor_id: selectedDoctor.id,
+        appointment_date: new Date().toISOString().split('T')[0], // Hoy por defecto (puedes mejorar con selector de fecha)
+        start_time: selectedSlot.start_time || "09:00:00",
+        end_time: selectedSlot.end_time || "10:00:00",
+        notes: `Cita agendada desde el chatbot`
+      };
+
+      const response = await axios.post(`${API_BASE}/appointments/`, appointmentData);
+    
+      alert(`✅ ¡Cita agendada exitosamente!\n\nID de cita: ${response.data.id}`);
+    
+      // Reiniciar el flujo
+      setStep(0);
+      setPatient({ cedula: '', nombre_completo: '', telefono: '', email: '' });
+      setSelectedSpecialty(null);
+      setSelectedDoctor(null);
+      setAvailabilities([]);
+      setSelectedSlot(null);
+
+    } catch (error) {
+      console.error(error);
+      alert(error.response?.data?.detail || "Error al agendar la cita. Inténtalo nuevamente.");
+    }
   };
 
   return (
