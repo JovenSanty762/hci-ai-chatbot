@@ -33,21 +33,40 @@ function App() {
     });
   };
 
-  const handleDoctorSelect = (doc) => {
+  const handleDoctorSelect = async (doc) => {
     setSelectedDoctor(doc);
-    // Aquí puedes llamar a un endpoint de availabilities si lo creas
-    // Por ahora simulamos algunos horarios
-    setAvailabilities([
-      { day: 'Lunes', time: '09:00' },
-      { day: 'Lunes', time: '10:30' },
-      { day: 'Martes', time: '14:00' },
-    ]);
-    setStep(4);
+    setStep(4);   // Cambiamos a "Cargando horarios..."
+
+    try {
+      const res = await axios.get(`${API_BASE}/doctors/${doc.id}/availability`);
+    
+      // Convertimos los horarios a un formato más amigable para mostrar
+      const formattedSlots = res.data.map(slot => ({
+        id: slot.id,
+        day_of_week: slot.day_of_week,
+        day_name: getDayName(slot.day_of_week),
+        start_time: slot.start_time,
+        end_time: slot.end_time,
+        // Generamos algunos horarios sugeridos dentro del rango (puedes mejorar esto)
+        suggested_times: generateSuggestedTimes(slot.start_time, slot.end_time)
+      }));
+
+      setAvailabilities(formattedSlots);
+    } catch (error) {
+      alert("Este médico no tiene horarios configurados todavía.");
+      setAvailabilities([]);
+      }
   };
 
-  const handleSlotSelect = (slot) => {
-    setSelectedSlot(slot);
-    setStep(5);
+  // Funciones auxiliares
+  const getDayName = (day) => {
+  const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    return days[day];
+  };
+
+  const generateSuggestedTimes = (start, end) => {
+    // Por simplicidad devolvemos el rango completo. Puedes mejorarlo para generar slots cada 30 min.
+    return [`${start} - ${end}`];
   };
 
   const handleBooking = async () => {
