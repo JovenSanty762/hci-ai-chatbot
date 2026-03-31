@@ -6,6 +6,7 @@ import re
 from typing import Dict, Any
 from ..config import OLLAMA_URL, OLLAMA_MODEL
 from ..logger import logger
+from ..utils.config import settings
 
 
 class LLMService:
@@ -20,23 +21,29 @@ class LLMService:
         logger.info(f"[LLMService] Inicializado | model={self.model} | url={self.ollama_url}")
 
     def generate_response(self, prompt: str, temperature: float = 0.7) -> str:
-        payload = {
-            "model": self.model,
-            "prompt": prompt,
-            "stream": False,
-            "options": {
-                "temperature": temperature
-            }
-        }
-
+#       payload = {
+#           "model": self.model,
+#            "prompt": prompt,
+#            "stream": False,
+#            "options": {
+#                "temperature": temperature
+#            }
+#        }
+#
         try:
-            response = requests.post(self.ollama_url, json=payload, timeout=60)
+            response = requests.post(
+                f"{self.ollama_url}/api/generate",
+                json={
+                    "model": self.model,
+                    "prompt": prompt,
+                    "temperature": temperature,
+                    "stream": False
+                },
+                timeout=90
+            )
             response.raise_for_status()
-            data = response.json()
-
-            llm_response = data.get("response", "").strip()
-
             logger.info("[LLMService] Respuesta exitosa desde Ollama")
+            llm_response = response.json().get("response", "").strip()
             return llm_response if llm_response else "⚠️ El modelo IA no devolvió respuesta."
 
         except requests.exceptions.Timeout:

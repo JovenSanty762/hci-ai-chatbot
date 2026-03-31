@@ -39,17 +39,20 @@ class ConversationManager:
             logger.info(f"[ConversationManager] Conversación expirada eliminada | conv_id={conv_id}")
 
     def save_message(self, conv_id: str, role: str, content: str):
-        self._cleanup_expired()
-        self._ensure_conversation(conv_id)
-
+        if conv_id not in self.conversations:
+            self.conversations[conv_id] = {"messages": [], "patient_info": {}}
+        
         self.conversations[conv_id]["messages"].append({
             "role": role,
             "content": content,
             "timestamp": datetime.utcnow().isoformat()
         })
 
-        self.conversations[conv_id]["last_activity"] = datetime.utcnow()
+    def get_history(self, conv_id: str) -> List[Dict]:
+        return self.conversations.get(conv_id, {}).get("messages", [])
 
+    def get_patient_info(self, conv_id: str) -> dict:
+        return self.conversations.get(conv_id, {}).get("patient_info", {})
         logger.info(f"[ConversationManager] Mensaje guardado | conv_id={conv_id} | role={role}")
 
     def update_state(self, conv_id: str, new_state: dict):
