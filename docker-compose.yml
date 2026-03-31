@@ -1,65 +1,42 @@
+version: '3.9'
+
 services:
-  mysql:
+  db:
     image: mysql:8.0
-    container_name: hospital_mysql
-    restart: unless-stopped
+    container_name: hci_db
+    restart: always
     environment:
       MYSQL_ROOT_PASSWORD: hospital2026
       MYSQL_DATABASE: hci_chatbot
+      MYSQL_USER: chatbot_user
+      MYSQL_PASSWORD: chatbot2026
     volumes:
-      - mysql_data:/var/lib/mysql
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
-    networks:
-      - internal
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p hospital2026"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  ollama:
-    image: ollama/ollama:latest
-    container_name: hospital_ollama
-    restart: unless-stopped
-    volumes:
-      - ollama_data:/root/.ollama
+      - mysql_data:/var/lib/mysql
     networks:
       - internal
     ports:
-      - "11434:11434"
-    healthcheck:
-      test: ["CMD", "sh", "-c", "ollama list || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
+      - "3307:3306"   # Puerto externo para poder conectarte desde tu máquina si quieres
 
   backend:
     build: ./backend
-    container_name: hospital_backend
-    restart: unless-stopped
+    container_name: hci_backend
+    restart: always
     depends_on:
-      mysql:
-        condition: service_healthy
-      ollama:
-        condition: service_healthy
+      - db
     environment:
-      MYSQL_USER: root
-      MYSQL_PASSWORD: hospital2026
-      MYSQL_HOST: mysql
-      MYSQL_PORT: 3306
-      MYSQL_DB: hci_chatbot
-
-      OLLAMA_URL: http://ollama:11434/api/generate
-      OLLAMA_MODEL: llama3
+      DATABASE_URL: mysql+pymysql://chatbot_user:chatbot2026@db:3306/hci_chatbot
+      OLLAMA_URL: http://ollama:11434
+      LLM_MODEL: llama3
     networks:
       - internal
-    volumes:
-      - ./backend/logs:/app/logs
+    ports:
+      - "8000:8000"   # Para probar el backend directamente
 
   frontend:
     build: ./frontend
-    container_name: hospital_frontend
-    restart: unless-stopped
+    container_name: hci_frontend
+    restart: always
     depends_on:
       - backend
     networks:
@@ -67,22 +44,38 @@ services:
 
   nginx:
     image: nginx:alpine
-    container_name: hospital_nginx
-    restart: unless-stopped
+    container_name: hci_nginx
+    restart: always
     ports:
       - "80:80"
     volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
     depends_on:
       - frontend
-      - backend
     networks:
       - internal
 
-networks:
-  internal:
-    driver: bridge
+  ollama:
+    image: ollama/ollama
+    container_name: hci_ollama
+    restart: always
+    volumes:
+      - ollama_data:/root/.ollama
+    # command: serve   # Se comenta porque ollama/ollama ya lo maneja
+    networks:
+      - internal
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
 
 volumes:
   mysql_data:
   ollama_data:
+
+networks:
+  internal:
+    driver: bridge
